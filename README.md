@@ -22,11 +22,6 @@ This repository provides Python functions for interacting with Adaptive Insights
 
 ## Usage
 
-### Exporting Account Balances
-Run `grantBalance.py` to export account balances from Adaptive Insights. The script authenticates, makes API requests, parses XML, and saves results as CSV.
-
-### Exporting Workday Journal Lines
-Run `wdJournals.py` to retrieve journal lines from Workday. The script authenticates, fetches data for a specified date range, normalizes JSON, and saves results as CSV.
 
 
 ## Example `.env` File

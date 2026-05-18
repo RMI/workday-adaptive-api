@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "workday-adaptive-api"
+version = "0.1.0"
+description = "Reusable Python helpers for Workday and Adaptive API integrations."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Greg Hoffman" }
+]
+dependencies = [
+  "pandas>=2.2.3",
+  "requests>=2.32.5",
+]
+
+[tool.setuptools]
+packages = ["workday_adaptive_api"]

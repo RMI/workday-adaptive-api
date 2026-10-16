@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 import warnings
+import xml.etree.ElementTree as ET
 from unittest.mock import Mock, patch
 
 from workday_adaptive_api import (
@@ -73,6 +74,11 @@ def _response(text: str) -> Mock:
     response.status_code = 200
     response.text = text
     return response
+
+
+def _sent_payload(mock_post: Mock) -> ET.Element:
+    """Parse the request body; this fails if the library sent malformed XML."""
+    return ET.fromstring(mock_post.call_args.kwargs["data"])
 
 
 @patch("workday_adaptive_api._http.requests.post")
@@ -155,6 +161,45 @@ class PartialResultTests(unittest.TestCase):
             WorkdayAdaptiveApiError, "failed: Invalid 'modeled-sheet name'"
         ):
             export_model_sheet(*ARGS, sheet_name="No Such Sheet")
+
+@patch("workday_adaptive_api._http.requests.post")
+class RequestXmlTests(unittest.TestCase):
+    """User input must not make the request XML malformed."""
+
+    SPECIAL = 'R&D "Plan" <v2>'
+
+    def test_export_dimensions_escapes_version_name(self, mock_post: Mock) -> None:
+        mock_post.return_value = _response(DIMENSIONS_OK)
+        export_dimensions(*ARGS, version_name=self.SPECIAL, dimension_ids="1,2")
+        include = _sent_payload(mock_post).find("include")
+        self.assertEqual(include.get("versionName"), self.SPECIAL)
+        self.assertEqual(include.get("dimensionIDs"), "1,2")
+
+    def test_export_data_escapes_all_inputs(self, mock_post: Mock) -> None:
+        mock_post.return_value = _response(DATA_OK)
+        export_data(
+            *ARGS,
+            version_name=self.SPECIAL,
+            account_code="A&B",
+            dimension_name='Dim "X"',
+        )
+        payload = _sent_payload(mock_post)
+        self.assertEqual(payload.find("version").get("name"), self.SPECIAL)
+        self.assertEqual(payload.find(".//account").get("code"), "A&B")
+        self.assertEqual(payload.find(".//dimension").get("name"), 'Dim "X"')
+
+    def test_export_model_sheet_escapes_sheet_name(self, mock_post: Mock) -> None:
+        mock_post.return_value = _response(DATA_OK)
+        export_model_sheet(*ARGS, sheet_name=self.SPECIAL)
+        sheet = _sent_payload(mock_post).find("modeled-sheet")
+        self.assertEqual(sheet.get("name"), self.SPECIAL)
+
+    def test_credentials_are_escaped(self, mock_post: Mock) -> None:
+        mock_post.return_value = _response(LEVELS_OK)
+        export_levels('tok&"<', "https://example.com/api", "inst&1")
+        credentials = _sent_payload(mock_post).find("credentials")
+        self.assertEqual(credentials.get("token"), 'tok&"<')
+        self.assertEqual(credentials.get("instanceCode"), "inst&1")
 
 if __name__ == "__main__":
     unittest.main()

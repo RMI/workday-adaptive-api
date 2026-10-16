@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import warnings
 import xml.etree.ElementTree as ET
+from xml.sax.saxutils import escape
 
 import pandas as pd
 
@@ -14,12 +15,20 @@ from .parsers import (
 )
 
 
+def _attr(value: str) -> str:
+    """Escape a value for use inside a double-quoted XML attribute."""
+    return escape(str(value), {'"': "&quot;"})
+
+
 def _adaptive_headers() -> dict[str, str]:
     return {"Content-Type": "application/xml"}
 
 
 def _adaptive_credentials_xml(access_token: str, instance_code: str) -> str:
-    return f'<credentials token="{access_token}" instanceCode="{instance_code}"/>'
+    return (
+        f'<credentials token="{_attr(access_token)}" '
+        f'instanceCode="{_attr(instance_code)}"/>'
+    )
 
 
 def _format_messages(root: ET.Element) -> list[str]:
@@ -66,7 +75,7 @@ def _post_adaptive_call(
 ) -> str:
     payload = (
         "<?xml version='1.0' encoding='UTF-8'?>"
-        f'<call method="{method}" callerName="PYTHON">'
+        f'<call method="{_attr(method)}" callerName="PYTHON">'
         f"{_adaptive_credentials_xml(adaptive_access_token, adaptive_instance_code)}"
         f"{body}"
         "</call>"
@@ -215,8 +224,8 @@ def export_dimensions(
         Raised when the HTTP request fails or Adaptive reports a failed call.
     """
     body = (
-        f'<include versionName="{version_name}" '
-        f'attributes="true" dimensionIDs="{dimension_ids}" '
+        f'<include versionName="{_attr(version_name)}" '
+        f'attributes="true" dimensionIDs="{_attr(dimension_ids)}" '
         'dimensionValues="true" displayNameEnabled="true"/>'
     )
     response_text = _post_adaptive_call(
@@ -304,16 +313,16 @@ def export_data(
         Raised when the HTTP request fails or Adaptive reports a failed call.
     """
     body = f"""
-        <version name="{version_name}" isDefault="false"/>
+        <version name="{_attr(version_name)}" isDefault="false"/>
         <format useInternalCodes="true" includeUnmappedItems="false" displayNameEnabled="true" includeDisplayNames="true"/>
         <filters>
             <accounts>
-                <account code="{account_code}" includeDescendants="true" isAssumption="false"/>
+                <account code="{_attr(account_code)}" includeDescendants="true" isAssumption="false"/>
             </accounts>
-            <timeSpan start="{start_date}" end="{end_date}"/>
+            <timeSpan start="{_attr(start_date)}" end="{_attr(end_date)}"/>
         </filters>
         <dimensions>
-            <dimension name="{dimension_name}"/>
+            <dimension name="{_attr(dimension_name)}"/>
             <dimension name="Project ID"/>
         </dimensions>
         <rules></rules>
@@ -382,9 +391,9 @@ def export_model_sheet(
         Raised when the HTTP request fails or Adaptive reports a failed call.
     """
     body = f"""
-        <version name="{version_name}"/>
+        <version name="{_attr(version_name)}"/>
         <modeled-sheet
-            name="{sheet_name}"
+            name="{_attr(sheet_name)}"
             isGlobal="false"
             displayNameEnabled="true"
             includeDisplayNames="true"
@@ -393,7 +402,7 @@ def export_model_sheet(
             useNumericIDs="false"
         />
         <filters>
-            <timeSpan start="{start_date}" end="{end_date}"/>
+            <timeSpan start="{_attr(start_date)}" end="{_attr(end_date)}"/>
         </filters>
     """
     response_text = _post_adaptive_call(

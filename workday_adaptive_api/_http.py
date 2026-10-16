@@ -10,6 +10,10 @@ class WorkdayAdaptiveApiError(Exception):
     """Raised when a Workday or Adaptive API request fails."""
 
 
+class AdaptiveApiWarning(UserWarning):
+    """Issued when Adaptive accepts a request but reports skipped or invalid input."""
+
+
 def _raise_for_status(response: Response, context: str) -> None:
     if response.ok:
         return

@@ -65,7 +65,7 @@ class ApiTests(unittest.TestCase):
         response = Mock()
         response.ok = True
         response.text = """
-        <response>
+        <response success="true">
             <output>
                 <accounts>
                     <account id="1" code="1000" name="Cash"/>

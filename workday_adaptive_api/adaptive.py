@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import warnings
+import xml.etree.ElementTree as ET
+
 import pandas as pd
 
-from ._http import post_xml
+from ._http import AdaptiveApiWarning, WorkdayAdaptiveApiError, post_xml
 from .parsers import (
     adaptive_export_to_dataframe,
     dimensions_to_dataframe,
@@ -17,6 +20,39 @@ def _adaptive_headers() -> dict[str, str]:
 
 def _adaptive_credentials_xml(access_token: str, instance_code: str) -> str:
     return f'<credentials token="{access_token}" instanceCode="{instance_code}"/>'
+
+
+def _format_messages(root: ET.Element) -> list[str]:
+    formatted = []
+    for message in root.iter("message"):
+        text = (message.text or "").strip()
+        label = message.get("key") or message.get("type")
+        formatted.append(f"{label}: {text}" if label else text)
+    return formatted
+
+
+def _check_adaptive_response(response_text: str, context: str) -> None:
+    """
+    Raise when Adaptive reports a failed call, and warn on skipped input.
+
+    Adaptive answers with HTTP 200 for most errors. The outcome is in the
+    ``success`` attribute of the ``<response>`` root and in its ``<message>``
+    elements.
+    """
+    try:
+        root = ET.fromstring(response_text.strip())
+    except ET.ParseError as exc:
+        raise WorkdayAdaptiveApiError(
+            f"{context} returned a response that is not XML: {exc}"
+        ) from exc
+
+    messages = _format_messages(root)
+    if root.get("success") != "true":
+        details = "; ".join(messages) or "no message returned"
+        raise WorkdayAdaptiveApiError(f"{context} failed: {details}")
+
+    for message in messages:
+        warnings.warn(f"{context}: {message}", AdaptiveApiWarning, stacklevel=4)
 
 
 def _post_adaptive_call(
@@ -35,13 +71,16 @@ def _post_adaptive_call(
         f"{body}"
         "</call>"
     )
-    return post_xml(
+    context = f"Adaptive {method} request"
+    response_text = post_xml(
         adaptive_public_api_endpoint,
         headers=_adaptive_headers(),
         data=payload,
         timeout=timeout,
-        context=f"Adaptive {method} request",
+        context=context,
     )
+    _check_adaptive_response(response_text, context)
+    return response_text
 
 
 def smoke_test_connection(
@@ -124,7 +163,7 @@ def export_accounts(
     Raises
     ------
     WorkdayAdaptiveApiError
-        Raised when the HTTP request fails.
+        Raised when the HTTP request fails or Adaptive reports a failed call.
     """
     response_text = _post_adaptive_call(
         "exportAccounts",
@@ -173,7 +212,7 @@ def export_dimensions(
     Raises
     ------
     WorkdayAdaptiveApiError
-        Raised when the HTTP request fails.
+        Raised when the HTTP request fails or Adaptive reports a failed call.
     """
     body = (
         f'<include versionName="{version_name}" '
@@ -262,7 +301,7 @@ def export_data(
     Raises
     ------
     WorkdayAdaptiveApiError
-        Raised when the HTTP request fails.
+        Raised when the HTTP request fails or Adaptive reports a failed call.
     """
     body = f"""
         <version name="{version_name}" isDefault="false"/>
@@ -340,7 +379,7 @@ def export_model_sheet(
     Raises
     ------
     WorkdayAdaptiveApiError
-        Raised when the HTTP request fails.
+        Raised when the HTTP request fails or Adaptive reports a failed call.
     """
     body = f"""
         <version name="{version_name}"/>
@@ -398,7 +437,7 @@ def export_levels(
     Raises
     ------
     WorkdayAdaptiveApiError
-        Raised when the HTTP request fails.
+        Raised when the HTTP request fails or Adaptive reports a failed call.
     """
     response_text = _post_adaptive_call(
         "exportLevels",

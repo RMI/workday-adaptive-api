@@ -52,6 +52,11 @@ report_data = get_raas_data(
 )
 ```
 
+## Errors and Warnings
+
+- A failed Workday or Adaptive call raises `WorkdayAdaptiveApiError`.
+- A partial Adaptive result, for example a skipped account, issues `AdaptiveApiWarning`.
+
 Library code does not load environment variables for you. If you want `.env`
 support in a consuming app or script, load it there with `python-dotenv`.
 

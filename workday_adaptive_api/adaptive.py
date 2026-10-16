@@ -223,9 +223,13 @@ def export_dimensions(
     WorkdayAdaptiveApiError
         Raised when the HTTP request fails or Adaptive reports a failed call.
     """
+    # Adaptive rejects dimensionIDs="" as an invalid list, so omit it to export all.
+    dimension_ids_attr = (
+        f'dimensionIDs="{_attr(dimension_ids)}" ' if dimension_ids.strip() else ""
+    )
     body = (
         f'<include versionName="{_attr(version_name)}" '
-        f'attributes="true" dimensionIDs="{_attr(dimension_ids)}" '
+        f'attributes="true" {dimension_ids_attr}'
         'dimensionValues="true" displayNameEnabled="true"/>'
     )
     response_text = _post_adaptive_call(
@@ -236,7 +240,25 @@ def export_dimensions(
         body=body,
         timeout=timeout,
     )
+    _warn_missing_dimension_ids(response_text, dimension_ids)
     return dimensions_to_dataframe(response_text)
+
+
+def _warn_missing_dimension_ids(response_text: str, dimension_ids: str) -> None:
+    """Warn on requested IDs that are absent. Adaptive drops them without a message."""
+    requested = [i.strip() for i in dimension_ids.split(",") if i.strip()]
+    if not requested:
+        return
+    root = ET.fromstring(response_text.strip())
+    returned = {d.get("id") for d in root.findall(".//dimensions/dimension")}
+    missing = [i for i in requested if i not in returned]
+    if missing:
+        warnings.warn(
+            "Adaptive exportDimensions request: no dimension returned for "
+            f"dimension_ids {', '.join(missing)}",
+            AdaptiveApiWarning,
+            stacklevel=3,
+        )
 
 
 def export_project_dimension_values(

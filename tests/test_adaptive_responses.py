@@ -5,6 +5,8 @@ import warnings
 import xml.etree.ElementTree as ET
 from unittest.mock import Mock, patch
 
+import pandas as pd
+
 from workday_adaptive_api import (
     AdaptiveApiWarning,
     WorkdayAdaptiveApiError,
@@ -15,6 +17,7 @@ from workday_adaptive_api import (
     export_versions,
 )
 from workday_adaptive_api.adaptive import _post_adaptive_call
+from workday_adaptive_api.parsers import dimensions_to_dataframe
 
 ARGS = ("token", "https://example.com/api", "instance")
 
@@ -151,6 +154,19 @@ class PartialResultTests(unittest.TestCase):
             frame = export_data(*ARGS, account_code="1000")
         self.assertEqual(frame.shape, (1, 3))
 
+    def test_unknown_dimension_ids_warn(self, mock_post: Mock) -> None:
+        # Adaptive returns only dimension 10 for "10,999" and sends no message.
+        mock_post.return_value = _response(DIMENSIONS_OK)
+        with self.assertWarnsRegex(AdaptiveApiWarning, "dimension_ids 999$"):
+            frame = export_dimensions(*ARGS, dimension_ids="10, 999")
+        self.assertEqual(len(frame), 4)
+
+    def test_known_dimension_ids_do_not_warn(self, mock_post: Mock) -> None:
+        mock_post.return_value = _response(DIMENSIONS_OK)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", AdaptiveApiWarning)
+            export_dimensions(*ARGS, dimension_ids="10")
+
     def test_message_without_key_keeps_text(self, mock_post: Mock) -> None:
         mock_post.return_value = _response(
             '<response success="false"><messages>'
@@ -200,6 +216,23 @@ class RequestXmlTests(unittest.TestCase):
         credentials = _sent_payload(mock_post).find("credentials")
         self.assertEqual(credentials.get("token"), 'tok&"<')
         self.assertEqual(credentials.get("instanceCode"), "inst&1")
+
+    def test_empty_dimension_ids_is_omitted(self, mock_post: Mock) -> None:
+        mock_post.return_value = _response(DIMENSIONS_OK)
+        export_dimensions(*ARGS)
+        include = _sent_payload(mock_post).find("include")
+        self.assertNotIn("dimensionIDs", include.attrib)
+
+class NestedDimensionValueTests(unittest.TestCase):
+    def test_nested_values_are_included_with_parent_id(self) -> None:
+        frame = dimensions_to_dataframe(DIMENSIONS_OK)
+        self.assertEqual(sorted(frame["value_id"]), ["100", "101", "102", "200"])
+        parents = dict(zip(frame["value_id"], frame["value_parent_id"]))
+        self.assertTrue(pd.isna(parents["100"]))
+        self.assertEqual(parents["101"], "100")
+        self.assertEqual(parents["102"], "101")
+        self.assertTrue(pd.isna(parents["200"]))
+
 
 if __name__ == "__main__":
     unittest.main()

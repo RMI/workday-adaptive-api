@@ -178,6 +178,14 @@ class PartialResultTests(unittest.TestCase):
         ):
             export_model_sheet(*ARGS, sheet_name="No Such Sheet")
 
+    def test_export_data_requests_only_dimension_name(self, mock_post: Mock) -> None:
+        # The instances have no "Project ID" dimension, so it is not requested.
+        mock_post.return_value = _response(DATA_OK)
+        export_data(*ARGS, account_code="1000")
+        names = [d.get("name") for d in _sent_payload(mock_post).iter("dimension")]
+        self.assertEqual(names, ["WD Project"])
+
+
 @patch("workday_adaptive_api._http.requests.post")
 class RequestXmlTests(unittest.TestCase):
     """User input must not make the request XML malformed."""

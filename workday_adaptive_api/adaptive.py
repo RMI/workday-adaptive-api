@@ -319,8 +319,7 @@ def export_data(
         End of the export time span, typically in ``MM/YYYY`` format expected
         by the Adaptive API.
     dimension_name:
-        Primary dimension to include alongside the built-in ``Project ID``
-        dimension already added by this helper.
+        Dimension to include in the export.
     timeout:
         Request timeout in seconds for the API call.
 
@@ -345,7 +344,6 @@ def export_data(
         </filters>
         <dimensions>
             <dimension name="{_attr(dimension_name)}"/>
-            <dimension name="Project ID"/>
         </dimensions>
         <rules></rules>
     """

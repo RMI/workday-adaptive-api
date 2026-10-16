@@ -31,4 +31,5 @@
 
 ### Added
 
-The `AdaptiveApiWarning` warning category is new.
+- `AdaptiveApiWarning` warning category.
+- `examples/adaptive_report.py`, which exports Adaptive net income for the previous month.

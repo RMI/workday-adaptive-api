@@ -72,7 +72,9 @@ Run the test suite with:
 python -m unittest discover -s tests
 ```
 
-## Example Script
+## Example Scripts
 
-See [examples/raas_report.py](examples/raas_report.py) for a local script that
-loads environment variables and fetches a Workday report.
+These local scripts load environment variables and get data for the previous month:
+
+- [examples/raas_report.py](examples/raas_report.py) fetches a Workday report.
+- [examples/adaptive_report.py](examples/adaptive_report.py) exports Adaptive net income.

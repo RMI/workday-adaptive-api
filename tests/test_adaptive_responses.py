@@ -231,6 +231,18 @@ class RequestXmlTests(unittest.TestCase):
         include = _sent_payload(mock_post).find("include")
         self.assertNotIn("dimensionIDs", include.attrib)
 
+    def test_reversed_time_span_raises_before_request(self, mock_post: Mock) -> None:
+        for call in (
+            lambda: export_data(*ARGS, start_date="09/2025", end_date="08/2025"),
+            lambda: export_model_sheet(
+                *ARGS, sheet_name="Sheet", start_date="09/2025", end_date="08/2025"
+            ),
+        ):
+            with self.assertRaisesRegex(ValueError, "after end_date"):
+                call()
+        mock_post.assert_not_called()
+
+
 class NestedDimensionValueTests(unittest.TestCase):
     def test_nested_values_are_included_with_parent_id(self) -> None:
         frame = dimensions_to_dataframe(DIMENSIONS_OK)

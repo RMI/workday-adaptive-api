@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 import warnings
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
@@ -62,6 +63,19 @@ def _check_adaptive_response(response_text: str, context: str) -> None:
 
     for message in messages:
         warnings.warn(f"{context}: {message}", AdaptiveApiWarning, stacklevel=4)
+
+
+def _validate_time_span(start_date: str, end_date: str) -> None:
+    """Reject a reversed ``MM/YYYY`` span. Adaptive returns no rows and no message for it."""
+    try:
+        start = datetime.strptime(start_date, "%m/%Y")
+        end = datetime.strptime(end_date, "%m/%Y")
+    except ValueError:
+        return
+    if start > end:
+        raise ValueError(
+            f"start_date {start_date!r} is after end_date {end_date!r}"
+        )
 
 
 def _post_adaptive_call(
@@ -332,7 +346,10 @@ def export_data(
     ------
     WorkdayAdaptiveApiError
         Raised when the HTTP request fails or Adaptive reports a failed call.
+    ValueError
+        Raised when ``start_date`` is after ``end_date``.
     """
+    _validate_time_span(start_date, end_date)
     body = f"""
         <version name="{_attr(version_name)}" isDefault="false"/>
         <format useInternalCodes="true" includeUnmappedItems="false" displayNameEnabled="true" includeDisplayNames="true"/>
@@ -409,7 +426,10 @@ def export_model_sheet(
     ------
     WorkdayAdaptiveApiError
         Raised when the HTTP request fails or Adaptive reports a failed call.
+    ValueError
+        Raised when ``start_date`` is after ``end_date``.
     """
+    _validate_time_span(start_date, end_date)
     body = f"""
         <version name="{_attr(version_name)}"/>
         <modeled-sheet

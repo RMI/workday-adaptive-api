@@ -61,8 +61,10 @@ def dimensions_to_dataframe(xml_text: str) -> pd.DataFrame:
     for dimension in root.findall(".//dimensions/dimension"):
         dimension_attrs = dimension.attrib
         pending = [(value, None) for value in dimension.findall("./dimensionValue")]
-        while pending:
-            value, parent_id = pending.pop(0)
+        index = 0
+        while index < len(pending):
+            value, parent_id = pending[index]
+            index += 1
             value_attrs = value.attrib
             pending.extend(
                 (child, value_attrs.get("id"))

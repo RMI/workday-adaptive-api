@@ -52,15 +52,24 @@ def dimensions_to_dataframe(xml_text: str) -> pd.DataFrame:
     """
     Flatten dimensions XML into one row per dimensionValue.
 
-    Dimension attributes are copied onto each value row.
+    Dimension attributes are copied onto each value row. Values nested under
+    another value are included, with ``value_parent_id`` set to the parent's id.
     """
     root = parse_xml(xml_text)
     rows: list[dict[str, str | None]] = []
 
     for dimension in root.findall(".//dimensions/dimension"):
         dimension_attrs = dimension.attrib
-        for value in dimension.findall("./dimensionValue"):
+        pending = [(value, None) for value in dimension.findall("./dimensionValue")]
+        index = 0
+        while index < len(pending):
+            value, parent_id = pending[index]
+            index += 1
             value_attrs = value.attrib
+            pending.extend(
+                (child, value_attrs.get("id"))
+                for child in value.findall("./dimensionValue")
+            )
             rows.append(
                 {
                     "dimension_id": dimension_attrs.get("id"),
@@ -69,6 +78,7 @@ def dimensions_to_dataframe(xml_text: str) -> pd.DataFrame:
                     "dimension_list_dimension": dimension_attrs.get("listDimension"),
                     "dimension_use_on_levels": dimension_attrs.get("useOnLevels"),
                     "value_id": value_attrs.get("id"),
+                    "value_parent_id": parent_id,
                     "value_name": value_attrs.get("name"),
                     "value_short_name": value_attrs.get("shortName"),
                     "value_description": value_attrs.get("description"),

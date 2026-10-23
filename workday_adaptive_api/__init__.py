@@ -1,4 +1,4 @@
-from ._http import WorkdayAdaptiveApiError
+from ._http import AdaptiveApiWarning, WorkdayAdaptiveApiError
 from .adaptive import (
     export_accounts,
     export_data,
@@ -21,6 +21,7 @@ from .parsers import (
 from .workday import get_raas_data
 
 __all__ = [
+    "AdaptiveApiWarning",
     "WorkdayAdaptiveApiError",
     "adaptive_export_to_dataframe",
     "dimensions_to_dataframe",

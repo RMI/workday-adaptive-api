@@ -52,6 +52,11 @@ report_data = get_raas_data(
 )
 ```
 
+## Errors and Warnings
+
+- A failed Workday or Adaptive call raises `WorkdayAdaptiveApiError`.
+- A partial Adaptive result, for example a skipped account, issues `AdaptiveApiWarning`.
+
 Library code does not load environment variables for you. If you want `.env`
 support in a consuming app or script, load it there with `python-dotenv`.
 
@@ -67,7 +72,9 @@ Run the test suite with:
 python -m unittest discover -s tests
 ```
 
-## Example Script
+## Example Scripts
 
-See [examples/raas_report.py](examples/raas_report.py) for a local script that
-loads environment variables and fetches a Workday report.
+These local scripts load environment variables and get data for the previous month:
+
+- [examples/raas_report.py](examples/raas_report.py) fetches a Workday report.
+- [examples/adaptive_report.py](examples/adaptive_report.py) exports Adaptive net income.

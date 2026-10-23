@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime
+import warnings
+import xml.etree.ElementTree as ET
+from xml.sax.saxutils import escape
+
 import pandas as pd
 
-from ._http import post_xml
+from ._http import AdaptiveApiWarning, WorkdayAdaptiveApiError, post_xml
 from .parsers import (
     adaptive_export_to_dataframe,
     dimensions_to_dataframe,
@@ -11,12 +16,66 @@ from .parsers import (
 )
 
 
+def _attr(value: str) -> str:
+    """Escape a value for use inside a double-quoted XML attribute."""
+    return escape(str(value), {'"': "&quot;"})
+
+
 def _adaptive_headers() -> dict[str, str]:
     return {"Content-Type": "application/xml"}
 
 
 def _adaptive_credentials_xml(access_token: str, instance_code: str) -> str:
-    return f'<credentials token="{access_token}" instanceCode="{instance_code}"/>'
+    return (
+        f'<credentials token="{_attr(access_token)}" '
+        f'instanceCode="{_attr(instance_code)}"/>'
+    )
+
+
+def _format_messages(root: ET.Element) -> list[str]:
+    formatted = []
+    for message in root.iter("message"):
+        text = (message.text or "").strip()
+        label = message.get("key") or message.get("type")
+        formatted.append(f"{label}: {text}" if label else text)
+    return formatted
+
+
+def _check_adaptive_response(response_text: str, context: str) -> None:
+    """
+    Raise when Adaptive reports a failed call, and warn on skipped input.
+
+    Adaptive answers with HTTP 200 for most errors. The outcome is in the
+    ``success`` attribute of the ``<response>`` root and in its ``<message>``
+    elements.
+    """
+    try:
+        root = ET.fromstring(response_text.strip())
+    except ET.ParseError as exc:
+        raise WorkdayAdaptiveApiError(
+            f"{context} returned a response that is not XML: {exc}"
+        ) from exc
+
+    messages = _format_messages(root)
+    if root.get("success") != "true":
+        details = "; ".join(messages) or "no message returned"
+        raise WorkdayAdaptiveApiError(f"{context} failed: {details}")
+
+    for message in messages:
+        warnings.warn(f"{context}: {message}", AdaptiveApiWarning, stacklevel=4)
+
+
+def _validate_time_span(start_date: str, end_date: str) -> None:
+    """Reject a reversed ``MM/YYYY`` span. Adaptive returns no rows and no message for it."""
+    try:
+        start = datetime.strptime(start_date, "%m/%Y")
+        end = datetime.strptime(end_date, "%m/%Y")
+    except ValueError:
+        return
+    if start > end:
+        raise ValueError(
+            f"start_date {start_date!r} is after end_date {end_date!r}"
+        )
 
 
 def _post_adaptive_call(
@@ -30,18 +89,21 @@ def _post_adaptive_call(
 ) -> str:
     payload = (
         "<?xml version='1.0' encoding='UTF-8'?>"
-        f'<call method="{method}" callerName="PYTHON">'
+        f'<call method="{_attr(method)}" callerName="PYTHON">'
         f"{_adaptive_credentials_xml(adaptive_access_token, adaptive_instance_code)}"
         f"{body}"
         "</call>"
     )
-    return post_xml(
+    context = f"Adaptive {method} request"
+    response_text = post_xml(
         adaptive_public_api_endpoint,
         headers=_adaptive_headers(),
         data=payload,
         timeout=timeout,
-        context=f"Adaptive {method} request",
+        context=context,
     )
+    _check_adaptive_response(response_text, context)
+    return response_text
 
 
 def smoke_test_connection(
@@ -124,7 +186,7 @@ def export_accounts(
     Raises
     ------
     WorkdayAdaptiveApiError
-        Raised when the HTTP request fails.
+        Raised when the HTTP request fails or Adaptive reports a failed call.
     """
     response_text = _post_adaptive_call(
         "exportAccounts",
@@ -173,11 +235,15 @@ def export_dimensions(
     Raises
     ------
     WorkdayAdaptiveApiError
-        Raised when the HTTP request fails.
+        Raised when the HTTP request fails or Adaptive reports a failed call.
     """
+    # Adaptive rejects dimensionIDs="" as an invalid list, so omit it to export all.
+    dimension_ids_attr = (
+        f'dimensionIDs="{_attr(dimension_ids)}" ' if dimension_ids.strip() else ""
+    )
     body = (
-        f'<include versionName="{version_name}" '
-        f'attributes="true" dimensionIDs="{dimension_ids}" '
+        f'<include versionName="{_attr(version_name)}" '
+        f'attributes="true" {dimension_ids_attr}'
         'dimensionValues="true" displayNameEnabled="true"/>'
     )
     response_text = _post_adaptive_call(
@@ -188,7 +254,25 @@ def export_dimensions(
         body=body,
         timeout=timeout,
     )
+    _warn_missing_dimension_ids(response_text, dimension_ids)
     return dimensions_to_dataframe(response_text)
+
+
+def _warn_missing_dimension_ids(response_text: str, dimension_ids: str) -> None:
+    """Warn on requested IDs that are absent. Adaptive drops them without a message."""
+    requested = [i.strip() for i in dimension_ids.split(",") if i.strip()]
+    if not requested:
+        return
+    root = ET.fromstring(response_text.strip())
+    returned = {d.get("id") for d in root.findall(".//dimensions/dimension")}
+    missing = [i for i in requested if i not in returned]
+    if missing:
+        warnings.warn(
+            "Adaptive exportDimensions request: no dimension returned for "
+            f"dimension_ids {', '.join(missing)}",
+            AdaptiveApiWarning,
+            stacklevel=3,
+        )
 
 
 def export_project_dimension_values(
@@ -249,8 +333,7 @@ def export_data(
         End of the export time span, typically in ``MM/YYYY`` format expected
         by the Adaptive API.
     dimension_name:
-        Primary dimension to include alongside the built-in ``Project ID``
-        dimension already added by this helper.
+        Dimension to include in the export.
     timeout:
         Request timeout in seconds for the API call.
 
@@ -262,20 +345,22 @@ def export_data(
     Raises
     ------
     WorkdayAdaptiveApiError
-        Raised when the HTTP request fails.
+        Raised when the HTTP request fails or Adaptive reports a failed call.
+    ValueError
+        Raised when ``start_date`` is after ``end_date``.
     """
+    _validate_time_span(start_date, end_date)
     body = f"""
-        <version name="{version_name}" isDefault="false"/>
+        <version name="{_attr(version_name)}" isDefault="false"/>
         <format useInternalCodes="true" includeUnmappedItems="false" displayNameEnabled="true" includeDisplayNames="true"/>
         <filters>
             <accounts>
-                <account code="{account_code}" includeDescendants="true" isAssumption="false"/>
+                <account code="{_attr(account_code)}" includeDescendants="true" isAssumption="false"/>
             </accounts>
-            <timeSpan start="{start_date}" end="{end_date}"/>
+            <timeSpan start="{_attr(start_date)}" end="{_attr(end_date)}"/>
         </filters>
         <dimensions>
-            <dimension name="{dimension_name}"/>
-            <dimension name="Project ID"/>
+            <dimension name="{_attr(dimension_name)}"/>
         </dimensions>
         <rules></rules>
     """
@@ -340,12 +425,15 @@ def export_model_sheet(
     Raises
     ------
     WorkdayAdaptiveApiError
-        Raised when the HTTP request fails.
+        Raised when the HTTP request fails or Adaptive reports a failed call.
+    ValueError
+        Raised when ``start_date`` is after ``end_date``.
     """
+    _validate_time_span(start_date, end_date)
     body = f"""
-        <version name="{version_name}"/>
+        <version name="{_attr(version_name)}"/>
         <modeled-sheet
-            name="{sheet_name}"
+            name="{_attr(sheet_name)}"
             isGlobal="false"
             displayNameEnabled="true"
             includeDisplayNames="true"
@@ -354,7 +442,7 @@ def export_model_sheet(
             useNumericIDs="false"
         />
         <filters>
-            <timeSpan start="{start_date}" end="{end_date}"/>
+            <timeSpan start="{_attr(start_date)}" end="{_attr(end_date)}"/>
         </filters>
     """
     response_text = _post_adaptive_call(
@@ -398,7 +486,7 @@ def export_levels(
     Raises
     ------
     WorkdayAdaptiveApiError
-        Raised when the HTTP request fails.
+        Raised when the HTTP request fails or Adaptive reports a failed call.
     """
     response_text = _post_adaptive_call(
         "exportLevels",

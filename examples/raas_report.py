@@ -3,10 +3,9 @@ from __future__ import annotations
 import os
 from datetime import date, timedelta
 
-import pandas as pd
 from dotenv import load_dotenv
 
-from workday_adaptive_api import get_raas_data, get_workday_access_token
+from workday_adaptive_api import get_raas_dataframe, get_workday_access_token
 
 
 def previous_month_range() -> tuple[str, str]:
@@ -27,10 +26,9 @@ if __name__ == "__main__":
         client_secret=os.environ["WD_CLIENT_SECRET"],
         refresh_token=os.environ["WD_REFRESH_TOKEN"],
     )
-    payload = get_raas_data(
+    report = get_raas_dataframe(
         token,
         os.environ["TIMESHEET_REPORT_URL_PROD"],
         params={"Start_Date": start_date, "End_Date": end_date},
     )
-    report = pd.json_normalize(payload)
     print(report)

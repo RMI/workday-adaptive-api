@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
+import pandas as pd
 import requests
 
-from ._http import get_json
+from ._http import WorkdayAdaptiveApiError, get_json
 
 
 def _json_request_url(
@@ -70,3 +71,37 @@ def get_raas_data(
         timeout=timeout,
         context="Workday RaaS request",
     )
+
+
+def get_raas_dataframe(
+    workday_access_token: str,
+    request_url: str,
+    *,
+    params: dict[str, Any] | None = None,
+    timeout: int = 300,
+) -> pd.DataFrame:
+    """
+    Fetch a Workday RaaS report as a DataFrame with one row per report entry.
+
+    Workday sends each value as a string and leaves out a field that has no
+    value, so the DataFrame holds strings and NaN for the missing fields.
+    A report with no entries returns an empty DataFrame.
+
+    Raises
+    ------
+    ValueError
+        Raised when the URL or ``params`` ask for a format other than JSON.
+    WorkdayAdaptiveApiError
+        Raised when the request fails, the response is not JSON, or the
+        response has no ``Report_Entry`` list.
+    """
+    payload = get_raas_data(
+        workday_access_token, request_url, params=params, timeout=timeout
+    )
+    entries = payload.get("Report_Entry") if isinstance(payload, dict) else None
+    if not isinstance(entries, list):
+        found = list(payload) if isinstance(payload, dict) else type(payload).__name__
+        raise WorkdayAdaptiveApiError(
+            f"Workday RaaS response has no Report_Entry list. Found: {found}"
+        )
+    return pd.DataFrame(entries)

@@ -18,7 +18,7 @@ from .parsers import (
     generic_elements_to_dataframe,
     parse_xml,
 )
-from .workday import get_raas_data
+from .workday import get_raas_data, get_raas_dataframe
 
 __all__ = [
     "AdaptiveApiWarning",
@@ -37,6 +37,7 @@ __all__ = [
     "generic_elements_to_dataframe",
     "get_adaptive_access_token",
     "get_raas_data",
+    "get_raas_dataframe",
     "get_workday_access_token",
     "parse_xml",
     "smoke_test_connection",

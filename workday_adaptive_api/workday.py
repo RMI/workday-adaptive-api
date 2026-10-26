@@ -100,7 +100,12 @@ def get_raas_dataframe(
     )
     entries = payload.get("Report_Entry") if isinstance(payload, dict) else None
     if not isinstance(entries, list):
-        found = list(payload) if isinstance(payload, dict) else type(payload).__name__
+        if isinstance(payload, dict) and "Report_Entry" in payload:
+            found = f"Report_Entry of type {type(entries).__name__}"
+        elif isinstance(payload, dict):
+            found = f"keys {list(payload)}"
+        else:
+            found = type(payload).__name__
         raise WorkdayAdaptiveApiError(
             f"Workday RaaS response has no Report_Entry list. Found: {found}"
         )

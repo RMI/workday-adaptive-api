@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 - 2026-10-26
+
+### Added
+
+`get_raas_dataframe` returns a Workday RaaS report as a DataFrame with one row for each report entry.
+It raises `WorkdayAdaptiveApiError` when the response has no `Report_Entry` list.
+
+### Fixed
+
+`examples/raas_report.py` now prints one row for each report entry.
+Before, it put the whole response into one row.
+
 ## 0.2.0 - 2026-10-16
 
 ### Fixed

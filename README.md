@@ -29,7 +29,7 @@ pip install -e .
 ```python
 from workday_adaptive_api import (
     get_adaptive_access_token,
-    get_raas_data,
+    get_raas_dataframe,
     get_workday_access_token,
 )
 
@@ -45,12 +45,16 @@ adaptive_token = get_adaptive_access_token(
     adaptive_access_token_url="https://example.com/adaptive-token",
 )
 
-report_data = get_raas_data(
+report = get_raas_dataframe(
     workday_access_token=workday_token,
     request_url="https://example.com/raas/report",
     params={"Start_Date": "2026-01-01", "End_Date": "2026-01-31"},
 )
 ```
+
+`get_raas_dataframe` returns one row for each report entry.
+The values are strings, as Workday sends them.
+To get the JSON response, use `get_raas_data`.
 
 ## Errors and Warnings
 

@@ -15,7 +15,7 @@ def _ok(payload: object) -> Mock:
     return response
 
 
-@patch("workday_adaptive_api._http.requests.get")
+@patch("workday_adaptive_api._http.requests.Session.request")
 class GetRaasDataframeTests(unittest.TestCase):
     # Field names and value types match a production timesheet report. A field
     # that has no value for a row is absent from that row.
@@ -87,11 +87,11 @@ class GetRaasDataframeTests(unittest.TestCase):
             timeout=60,
         )
 
-        sent_url = mock_get.call_args.args[0]
+        sent_url = mock_get.call_args.kwargs["url"]
         self.assertIn("Start_Date=2026-09-01", sent_url)
         self.assertIn("End_Date=2026-09-30", sent_url)
         self.assertIn("format=json", sent_url)
-        self.assertEqual(mock_get.call_args.kwargs["timeout"], 60)
+        self.assertEqual(mock_get.call_args.kwargs["timeout"], (10, 60))
 
 
 if __name__ == "__main__":

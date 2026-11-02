@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "workday-adaptive-api"
-version = "0.3.0"
+version = "0.4.0"
 description = "Reusable Python helpers for Workday and Adaptive API integrations."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,6 +15,7 @@ authors = [
 dependencies = [
   "pandas>=2.2.3",
   "requests>=2.32.5",
+  "urllib3>=1.26",
 ]
 
 [tool.setuptools]

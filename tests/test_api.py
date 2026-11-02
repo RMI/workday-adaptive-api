@@ -13,7 +13,7 @@ from workday_adaptive_api import (
 
 
 class ApiTests(unittest.TestCase):
-    @patch("workday_adaptive_api._http.requests.post")
+    @patch("workday_adaptive_api._http.requests.Session.request")
     def test_get_workday_access_token_success(self, mock_post: Mock) -> None:
         response = Mock()
         response.ok = True
@@ -24,7 +24,7 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(token, "abc123")
 
-    @patch("workday_adaptive_api._http.requests.post")
+    @patch("workday_adaptive_api._http.requests.Session.request")
     def test_get_workday_access_token_failure_raises(self, mock_post: Mock) -> None:
         response = Mock()
         response.ok = False
@@ -35,7 +35,7 @@ class ApiTests(unittest.TestCase):
         with self.assertRaises(WorkdayAdaptiveApiError):
             get_workday_access_token("https://example.com/token", "id", "secret", "refresh")
 
-    @patch("workday_adaptive_api._http.requests.get")
+    @patch("workday_adaptive_api._http.requests.Session.request")
     def test_get_adaptive_access_token_success(self, mock_get: Mock) -> None:
         response = Mock()
         response.ok = True
@@ -46,7 +46,7 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(token, "adaptive-token")
 
-    @patch("workday_adaptive_api._http.requests.get")
+    @patch("workday_adaptive_api._http.requests.Session.request")
     def test_get_raas_data_failure_raises(self, mock_get: Mock) -> None:
         response = Mock()
         response.ok = False
@@ -57,7 +57,7 @@ class ApiTests(unittest.TestCase):
         with self.assertRaises(WorkdayAdaptiveApiError):
             get_raas_data("token", "https://example.com/report")
 
-    @patch("workday_adaptive_api._http.requests.post")
+    @patch("workday_adaptive_api._http.requests.Session.request")
     def test_export_accounts_returns_dataframe_without_writing_files(
         self,
         mock_post: Mock,

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import socket
 import unittest
 from unittest.mock import Mock, patch
 
 import requests
+from urllib3.util.retry import Retry
 
+from workday_adaptive_api import _http
 from workday_adaptive_api import (
     WorkdayAdaptiveApiError,
     export_levels,
@@ -29,7 +32,7 @@ def _non_json_response(text: str, content_type: str) -> Mock:
 
 
 class NonJsonResponseTests(unittest.TestCase):
-    @patch("workday_adaptive_api._http.requests.get")
+    @patch("workday_adaptive_api._http.requests.Session.request")
     def test_raas_xml_response_raises(self, mock_get: Mock) -> None:
         mock_get.return_value = _non_json_response(
             "<?xml version='1.0' encoding='UTF-8'?><wd:Report_Data/>",
@@ -40,7 +43,7 @@ class NonJsonResponseTests(unittest.TestCase):
         ):
             get_raas_data("token", "https://example.com/report")
 
-    @patch("workday_adaptive_api._http.requests.get")
+    @patch("workday_adaptive_api._http.requests.Session.request")
     def test_raas_csv_response_raises(self, mock_get: Mock) -> None:
         mock_get.return_value = _non_json_response(
             "Journal,Journal_Number\nOperational,1\n", "text/csv; charset=UTF-8"
@@ -48,20 +51,20 @@ class NonJsonResponseTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkdayAdaptiveApiError, "Journal,Journal_Number"):
             get_raas_data("token", "https://example.com/report")
 
-    @patch("workday_adaptive_api._http.requests.post")
+    @patch("workday_adaptive_api._http.requests.Session.request")
     def test_workday_token_non_json_raises(self, mock_post: Mock) -> None:
         mock_post.return_value = _non_json_response("<html>Error</html>", "text/html")
         with self.assertRaisesRegex(WorkdayAdaptiveApiError, "Workday access token"):
             get_workday_access_token("https://example.com/token", "id", "secret", "r")
 
-    @patch("workday_adaptive_api._http.requests.get")
+    @patch("workday_adaptive_api._http.requests.Session.request")
     def test_adaptive_token_non_json_raises(self, mock_get: Mock) -> None:
         mock_get.return_value = _non_json_response("<html>Error</html>", "text/html")
         with self.assertRaisesRegex(WorkdayAdaptiveApiError, "Adaptive access token"):
             get_adaptive_access_token("wd-token", "https://example.com/adaptive")
 
 
-@patch("workday_adaptive_api._http.requests.get")
+@patch("workday_adaptive_api._http.requests.Session.request")
 class RaasFormatGuardTests(unittest.TestCase):
     """Workday ignores the Accept header; only the format parameter selects JSON."""
 
@@ -72,9 +75,9 @@ class RaasFormatGuardTests(unittest.TestCase):
         mock_get.return_value = response
 
     def _sent_url(self, mock_get: Mock) -> str:
-        """Return the URL that requests.get would send for the last call."""
+        """Return the URL that the session would send for the last call."""
         return requests.Request(
-            "GET", mock_get.call_args.args[0], params=mock_get.call_args.kwargs["params"]
+            "GET", mock_get.call_args.kwargs["url"], params=mock_get.call_args.kwargs["params"]
         ).prepare().url
 
     def test_non_json_format_in_url_raises_before_request(self, mock_get: Mock) -> None:
@@ -152,7 +155,7 @@ class RaasFormatGuardTests(unittest.TestCase):
 
 
 class NetworkErrorTests(unittest.TestCase):
-    @patch("workday_adaptive_api._http.requests.get")
+    @patch("workday_adaptive_api._http.requests.Session.request")
     def test_raas_timeout_raises(self, mock_get: Mock) -> None:
         # A report URL without its date prompt can run past the read timeout.
         mock_get.side_effect = requests.exceptions.ReadTimeout("Read timed out.")
@@ -162,7 +165,7 @@ class NetworkErrorTests(unittest.TestCase):
             get_raas_data("token", "https://example.com/report")
         self.assertIsInstance(caught.exception.__cause__, requests.exceptions.ReadTimeout)
 
-    @patch("workday_adaptive_api._http.requests.post")
+    @patch("workday_adaptive_api._http.requests.Session.request")
     def test_adaptive_connection_error_raises(self, mock_post: Mock) -> None:
         mock_post.side_effect = requests.exceptions.ConnectionError("Name not resolved")
         with self.assertRaisesRegex(
@@ -170,11 +173,47 @@ class NetworkErrorTests(unittest.TestCase):
         ):
             export_levels("token", "https://example.com/api", "instance")
 
-    @patch("workday_adaptive_api._http.requests.post")
+    @patch("workday_adaptive_api._http.requests.Session.request")
     def test_workday_token_timeout_raises(self, mock_post: Mock) -> None:
         mock_post.side_effect = requests.exceptions.ConnectTimeout("timed out")
         with self.assertRaisesRegex(WorkdayAdaptiveApiError, "ConnectTimeout"):
             get_workday_access_token("https://example.com/token", "id", "secret", "r")
+
+
+class ConnectRetryTests(unittest.TestCase):
+    def test_session_retries_only_failed_connects(self) -> None:
+        with _http._session() as session:
+            for prefix in ("https://", "http://"):
+                retry = session.get_adapter(prefix).max_retries
+                self.assertEqual(retry.connect, 4)
+                self.assertEqual(retry.read, 0)
+                self.assertEqual(retry.status, 0)
+                self.assertEqual(retry.other, 0)
+                self.assertEqual(retry.backoff_factor, 1)
+
+    @patch("workday_adaptive_api._http.requests.Session.request")
+    def test_connect_and_read_timeouts_are_sent(self, mock_request: Mock) -> None:
+        mock_request.return_value = Mock(ok=True, text="ok")
+        _http.post_xml(
+            "https://example.com/api", headers={}, data="<call/>", context="test"
+        )
+        self.assertEqual(mock_request.call_args.kwargs["timeout"], (10, 300))
+        self.assertEqual(mock_request.call_args.kwargs["method"], "POST")
+
+    @patch("workday_adaptive_api._http.BACKOFF_FACTOR", 0)
+    def test_refused_connect_is_tried_five_times(self) -> None:
+        # A closed local port refuses the connect at once, with no network use.
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        with patch.object(
+            Retry, "increment", autospec=True, side_effect=Retry.increment
+        ) as increment:
+            with self.assertRaisesRegex(
+                WorkdayAdaptiveApiError, "exportLevels request failed: ConnectionError"
+            ):
+                export_levels("token", f"http://127.0.0.1:{port}/api", "instance")
+        self.assertEqual(increment.call_count, 5)
 
 
 if __name__ == "__main__":

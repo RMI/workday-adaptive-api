@@ -84,7 +84,7 @@ def _sent_payload(mock_post: Mock) -> ET.Element:
     return ET.fromstring(mock_post.call_args.kwargs["data"])
 
 
-@patch("workday_adaptive_api._http.requests.post")
+@patch("workday_adaptive_api._http.requests.Session.request")
 class FailedCallTests(unittest.TestCase):
     """Adaptive reports success="false" with HTTP 200; each must raise."""
 
@@ -129,7 +129,7 @@ class FailedCallTests(unittest.TestCase):
             export_levels(*ARGS)
 
 
-@patch("workday_adaptive_api._http.requests.post")
+@patch("workday_adaptive_api._http.requests.Session.request")
 class PartialResultTests(unittest.TestCase):
     """Adaptive skips invalid accounts or dimensions and returns the rest."""
 
@@ -186,7 +186,7 @@ class PartialResultTests(unittest.TestCase):
         self.assertEqual(names, ["WD Project"])
 
 
-@patch("workday_adaptive_api._http.requests.post")
+@patch("workday_adaptive_api._http.requests.Session.request")
 class RequestXmlTests(unittest.TestCase):
     """User input must not make the request XML malformed."""
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 - 2026-11-02
+
+### Changed
+
+- All requests now wait 10 seconds for a connection.
+  The `timeout` argument now sets only the read timeout. Its default stays 300 seconds.
+  Before, a host that did not answer made a call wait for the full `timeout`.
+- A request that cannot connect now tries again, up to 5 tries in total.
+  The library waits 0, 2, 4, and 8 seconds between the tries.
+  It does not try again after a read error or an HTTP error status, so a call never runs twice on the server.
+- The package now requires `urllib3>=1.26`.
+
 ## 0.3.0 - 2026-10-26
 
 ### Added

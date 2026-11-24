@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 import warnings
 import xml.etree.ElementTree as ET
@@ -304,7 +305,7 @@ def export_data(
     account_code: str = "",
     start_date: str = "08/2025",
     end_date: str = "09/2025",
-    dimension_name: str = "WD Project",
+    dimension_names: Sequence[str] = ("WD Project",),
     timeout: int = 300,
 ) -> pd.DataFrame:
     """
@@ -332,8 +333,9 @@ def export_data(
     end_date:
         End of the export time span, typically in ``MM/YYYY`` format expected
         by the Adaptive API.
-    dimension_name:
-        Dimension to include in the export.
+    dimension_names:
+        Names of the dimensions to include in the export, in order.
+        Adaptive adds one column for each dimension.
     timeout:
         Request timeout in seconds for the API call.
 
@@ -348,8 +350,19 @@ def export_data(
         Raised when the HTTP request fails or Adaptive reports a failed call.
     ValueError
         Raised when ``start_date`` is after ``end_date``.
+    ValueError
+        Raised when ``dimension_names`` is empty.
+    TypeError
+        Raised when ``dimension_names`` is a string instead of a list of names.
     """
     _validate_time_span(start_date, end_date)
+    if isinstance(dimension_names, str):
+        raise TypeError("dimension_names must be a list of names, not a string")
+    if not dimension_names:
+        raise ValueError("dimension_names must name at least one dimension")
+    dimensions_xml = "".join(
+        f'<dimension name="{_attr(name)}"/>' for name in dimension_names
+    )
     body = f"""
         <version name="{_attr(version_name)}" isDefault="false"/>
         <format useInternalCodes="true" includeUnmappedItems="false" displayNameEnabled="true" includeDisplayNames="true"/>
@@ -359,9 +372,7 @@ def export_data(
             </accounts>
             <timeSpan start="{_attr(start_date)}" end="{_attr(end_date)}"/>
         </filters>
-        <dimensions>
-            <dimension name="{_attr(dimension_name)}"/>
-        </dimensions>
+        <dimensions>{dimensions_xml}</dimensions>
         <rules></rules>
     """
     response_text = _post_adaptive_call(

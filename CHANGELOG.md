@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 - 2026-11-24
+
+### Changed (breaking)
+
+`export_data` takes `dimension_names`, a list, instead of `dimension_name`.
+One call can now export more than one dimension, for example
+`dimension_names=["WD Project", "WD Customer Contract"]`.
+The default stays `("WD Project",)`.
+
+- An empty list raises `ValueError`.
+- A string raises `TypeError`. Put one name in a list: `["WD Project"]`.
+
 ## 0.4.0 - 2026-11-02
 
 ### Changed

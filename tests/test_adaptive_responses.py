@@ -178,12 +178,33 @@ class PartialResultTests(unittest.TestCase):
         ):
             export_model_sheet(*ARGS, sheet_name="No Such Sheet")
 
-    def test_export_data_requests_only_dimension_name(self, mock_post: Mock) -> None:
+    def test_export_data_requests_only_default_dimension(self, mock_post: Mock) -> None:
         # The instances have no "Project ID" dimension, so it is not requested.
         mock_post.return_value = _response(DATA_OK)
         export_data(*ARGS, account_code="1000")
         names = [d.get("name") for d in _sent_payload(mock_post).iter("dimension")]
         self.assertEqual(names, ["WD Project"])
+
+    def test_export_data_requests_dimensions_in_order(self, mock_post: Mock) -> None:
+        mock_post.return_value = _response(DATA_OK)
+        export_data(
+            *ARGS,
+            account_code="1000",
+            dimension_names=["WD Project", "WD Customer Contract"],
+        )
+        names = [d.get("name") for d in _sent_payload(mock_post).iter("dimension")]
+        self.assertEqual(names, ["WD Project", "WD Customer Contract"])
+
+    def test_export_data_empty_dimension_names_raises(self, mock_post: Mock) -> None:
+        with self.assertRaisesRegex(ValueError, "dimension_names"):
+            export_data(*ARGS, account_code="1000", dimension_names=[])
+        mock_post.assert_not_called()
+
+    def test_export_data_string_dimension_names_raises(self, mock_post: Mock) -> None:
+        # A string is a sequence, so it would send one dimension per character.
+        with self.assertRaisesRegex(TypeError, "dimension_names"):
+            export_data(*ARGS, account_code="1000", dimension_names="WD Project")
+        mock_post.assert_not_called()
 
 
 @patch("workday_adaptive_api._http.requests.Session.request")
@@ -205,7 +226,7 @@ class RequestXmlTests(unittest.TestCase):
             *ARGS,
             version_name=self.SPECIAL,
             account_code="A&B",
-            dimension_name='Dim "X"',
+            dimension_names=['Dim "X"'],
         )
         payload = _sent_payload(mock_post)
         self.assertEqual(payload.find("version").get("name"), self.SPECIAL)

@@ -56,6 +56,23 @@ report = get_raas_dataframe(
 The values are strings, as Workday sends them.
 To get the JSON response, use `get_raas_data`.
 
+`export_data` returns Adaptive data for an account and its descendants.
+It adds one column for each name in `dimension_names`:
+
+```python
+from workday_adaptive_api import export_data
+
+revenue = export_data(
+    adaptive_token,
+    "https://example.com/adaptive-api",
+    "instance-code",
+    account_code="LAS_REVENUES",
+    start_date="11/2026",
+    end_date="12/2026",
+    dimension_names=["WD Project", "WD Customer Contract"],
+)
+```
+
 ## Errors and Warnings
 
 - A failed Workday or Adaptive call raises `WorkdayAdaptiveApiError`.
